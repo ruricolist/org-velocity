@@ -1,0 +1,4 @@
+This the development version of org-velocity.
+
+At the moment it differs from the version in contrib principally in
+making use of lexical binding and cl-lib.
