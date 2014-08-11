@@ -153,12 +153,13 @@ See the documentation for `org-capture-templates'."
   :type (or (get 'org-capture-templates 'custom-type) 'list))
 
 (defcustom org-velocity-heading-level 1
-  "Only match headings at this level or higher."
+  "Only match headings at this level or higher.
+0 means to match headings at any level."
   :group 'org-velocity
   :type 'integer
   :safe (lambda (x)
           (and (integerp x)
-               (>= x 1))))
+               (>= x 0))))
 
 (defvar crm-separator)                  ;Ensure dynamic binding.
 
@@ -210,7 +211,9 @@ If there is no last heading, return nil."
 
 (cl-defun org-velocity-heading-regexp (&optional (level org-velocity-heading-level))
   "Regexp to match headings at LEVEL or deeper."
-  (format "^\\*\\{1,%d\\} " level))
+  (if (zerop level)
+      "^\\*+ "
+    (format "^\\*\\{1,%d\\} " level)))
 
 (defvar org-velocity-search nil
   "Variable to bind to current search.")
