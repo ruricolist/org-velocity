@@ -723,9 +723,7 @@ file. Calling with ARG forces current file."
              (if org-velocity-search-is-incremental
                  (org-velocity-incremental-read "Velocity search: ")
                (org-velocity-read-string "Velocity search: " search))))
-        (progn
-          (kill-buffer (org-velocity-match-buffer))
-          (delete-other-windows))))))
+        (kill-buffer (org-velocity-match-buffer))))))
 
 (defalias 'org-velocity-read 'org-velocity)
 
