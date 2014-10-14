@@ -685,7 +685,7 @@ displayed."
                      ;; Truncate the index to the size of the buffer to be
                      ;; displayed.
                      (with-selected-window match-window
-                       (if (> (window-height) (length org-velocity-index))
+                       (if (< (window-height) (length org-velocity-index))
                            ;; (subseq org-velocity-index 0 (window-height))
                            (cl-loop for hint in org-velocity-index
                                     for i to (1- (window-height))
