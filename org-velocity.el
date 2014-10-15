@@ -1,4 +1,4 @@
-;;; org-velocity.el --- something like Notational Velocity for Org.
+;;; org-velocity.el --- something like Notational Velocity for Org. -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2010-2014 Paul M. Rodriguez
 
@@ -349,10 +349,14 @@ use it."
     (add-to-history 'search-ring
                     (button-get button 'search)
                     search-ring-max))
-  (org-velocity-edit-entry (button-get button 'match)))
+  (let ((match (button-get button 'match)))
+    (throw 'org-velocity-done
+           (lambda ()
+             (org-velocity-edit-entry match)))))
 
 (define-button-type 'org-velocity-button
-  'action #'org-velocity-visit-button)
+  'action #'org-velocity-visit-button
+  'follow-link 'mouse-face)
 
 (defsubst org-velocity-buttonize (heading)
   "Insert HEADING as a text button with no hints."
@@ -543,15 +547,6 @@ If ASK is non-nil, ask first."
       (throw 'org-velocity-select ev)
     (call-interactively 'org-velocity-electric-undefined)))
 
-(defun org-velocity-electric-click (ev)
-  "Follow hint indexed by a mouse event EV."
-  (interactive "e")
-  (throw 'org-velocity-select
-         (nth (1- (count-lines
-                   (point-min)
-                   (posn-point (event-start ev))))
-              org-velocity-index)))
-
 (defun org-velocity-electric-edit ()
   "Edit the search string."
   (interactive)
@@ -572,8 +567,8 @@ If ASK is non-nil, ask first."
     (define-key map "\C-v" 'scroll-up)
     (define-key map "\M-v" 'scroll-down)
     (define-key map (kbd "RET") 'org-velocity-electric-edit)
-    (define-key map [mouse-1] 'org-velocity-electric-click)
-    (define-key map [mouse-2] 'org-velocity-electric-click)
+    (define-key map [mouse-1] nil)
+    (define-key map [mouse-2] nil)
     (define-key map [escape] 'keyboard-quit)
     (define-key map "\C-h" 'help-command)
     map))
@@ -590,22 +585,9 @@ If ASK is non-nil, ask first."
 
 (defvar org-velocity-incremental-keymap
   (let ((map (make-sparse-keymap)))
-    (define-key map [mouse-1] 'org-velocity-click-for-incremental)
-    (define-key map [mouse-2] 'org-velocity-click-for-incremental)
     (define-key map "\C-v" 'scroll-up)
     (define-key map "\M-v" 'scroll-down)
     map))
-
-(defun org-velocity-click-for-incremental ()
-  "Jump out of search and select hint clicked on."
-  (interactive)
-  (let ((ev last-command-event))
-    (org-velocity-activate-button
-     (nth (- (count-lines
-              (point-min)
-              (posn-point (event-start ev))) 2)
-          org-velocity-index)))
-  (throw 'click (current-buffer)))
 
 (defun org-velocity-displaying-completions-p ()
   "Is there a *Completions* buffer showing?"
@@ -736,10 +718,13 @@ file. Calling with ARG forces current file."
       (unwind-protect
           (let ((dabbrev-search-these-buffers-only
                  (list (org-velocity-bucket-buffer))))
-            (org-velocity-engine
-             (if org-velocity-search-is-incremental
-                 (org-velocity-incremental-read "Velocity search: ")
-               (org-velocity-read-string "Velocity search: " search))))
+            (funcall
+             (catch 'org-velocity-done
+               (org-velocity-engine
+                (if org-velocity-search-is-incremental
+                    (org-velocity-incremental-read "Velocity search: ")
+                  (org-velocity-read-string "Velocity search: " search)))
+               #'ignore)))
         (kill-buffer (org-velocity-match-buffer))))))
 
 (defalias 'org-velocity-read 'org-velocity)
