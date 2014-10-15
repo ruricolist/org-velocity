@@ -268,6 +268,9 @@ use it."
   "Return the proper buffer for Org-Velocity to display in."
   (get-buffer-create org-velocity-match-buffer-name))
 
+(defsubst org-velocity-match-window ()
+  (get-buffer-window (org-velocity-match-buffer)))
+
 (defsubst org-velocity-match-staging-buffer ()
   (get-buffer-create " Velocity matches"))
 
@@ -488,7 +491,8 @@ If ASK is non-nil, ask first."
       (case
           (if (and org-velocity-force-new (eq last-command-event ?\C-j))
               :force
-            (let ((matches (org-velocity-present search)))
+            (let* ((org-velocity-index (org-velocity-adjust-index))
+                   (matches (org-velocity-present search)))
               (cond ((null matches) :new)
                     ((null (cdr matches)) :follow)
                     (t :prompt))))
@@ -674,6 +678,25 @@ If ASK is non-nil, ask first."
           (org-velocity-read-with-completion prompt)
         (read-string prompt)))))
 
+(cl-defun org-velocity-adjust-index
+    (&optional (match-window (org-velocity-match-window)))
+  "Truncate or extend `org-velocity-index' to the lines in
+MATCH-WINDOW."
+  (with-selected-window match-window
+    (let ((lines (window-height))
+          (hints (length org-velocity-index)))
+      (cond ((= lines hints)
+             org-velocity-index)
+            ;; Truncate the index to the size of
+            ;; the buffer to be displayed.
+            ((< lines hints)
+             (cl-subseq org-velocity-index 0 lines))
+            ;; If the window is so tall we run out of indices, at
+            ;; least make the additional results clickable.
+            ((> lines hints)
+             (append org-velocity-index
+                     (make-list (- lines hints) nil)))))))
+
 (defun org-velocity-incremental-read (prompt)
   "Read string with PROMPT and display results incrementally.
 Stop searching once there are more matches than can be
@@ -681,20 +704,14 @@ displayed."
   (let ((res
          (unwind-protect
              (let* ((match-window (display-buffer (org-velocity-match-buffer)))
-                    (org-velocity-index
-                     ;; Truncate the index to the size of the buffer to be
-                     ;; displayed.
-                     (with-selected-window match-window
-                       (if (< (window-height) (length org-velocity-index))
-                           (cl-subseq org-velocity-index 0 (window-height))
-                         org-velocity-index))))
+                    (org-velocity-index (org-velocity-adjust-index match-window)))
                (catch 'click
                  (add-hook 'post-command-hook 'org-velocity-update)
-                 (if (eq org-velocity-search-method 'regexp)
-                     (read-regexp prompt)
-                   (if org-velocity-use-completion
-                       (org-velocity-read-with-completion prompt)
-                     (read-string prompt)))))
+                 (cond ((eq org-velocity-search-method 'regexp)
+                        (read-regexp prompt))
+                       (org-velocity-use-completion
+                        (org-velocity-read-with-completion prompt))
+                       (t (read-string prompt)))))
            (remove-hook 'post-command-hook 'org-velocity-update))))
     (if (bufferp res) (org-pop-to-buffer-same-window res) res)))
 
