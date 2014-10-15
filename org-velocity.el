@@ -342,10 +342,10 @@ use it."
 
 (defun org-velocity-visit-button (button)
   (run-hooks 'mouse-leave-buffer-hook)
-  (if org-velocity-use-search-ring
-      (add-to-history 'search-ring
-                      (button-get button 'search)
-                      search-ring-max))
+  (when org-velocity-use-search-ring
+    (add-to-history 'search-ring
+                    (button-get button 'search)
+                    search-ring-max))
   (org-velocity-edit-entry (button-get button 'match)))
 
 (define-button-type 'org-velocity-button
