@@ -686,10 +686,7 @@ displayed."
                      ;; displayed.
                      (with-selected-window match-window
                        (if (< (window-height) (length org-velocity-index))
-                           ;; (subseq org-velocity-index 0 (window-height))
-                           (cl-loop for hint in org-velocity-index
-                                    for i to (1- (window-height))
-                                    collect hint)
+                           (cl-subseq org-velocity-index 0 (window-height))
                          org-velocity-index))))
                (catch 'click
                  (add-hook 'post-command-hook 'org-velocity-update)
