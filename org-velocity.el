@@ -183,7 +183,7 @@ Replace all contiguous whitespace with single spaces."
         (point-max))))
      " ")))
 
-(defstruct org-velocity-heading buffer position name level preview)
+(cl-defstruct org-velocity-heading buffer position name level preview)
 
 (defsubst org-velocity-nearest-heading (position)
   "Return last heading at POSITION.
@@ -384,7 +384,7 @@ use it."
 (defun org-velocity-generic-search (search &optional hide-hints)
   "Display any entry containing SEARCH."
   (let ((hints org-velocity-index) matches)
-    (block nil
+    (cl-block nil
       (while (and hints (re-search-forward search nil t))
         (let ((match (org-velocity-nearest-heading (point))))
           (org-velocity-present-match
@@ -447,7 +447,7 @@ Return matches."
                     (inhibit-field-text-motion t))
                 (save-excursion
                   (org-velocity-beginning-of-headings)
-                  (case org-velocity-search-method
+                  (cl-case org-velocity-search-method
                     (all (org-velocity-all-search search hide-hints))
                     (phrase (org-velocity-generic-search
                              (concat "\\<" (regexp-quote search))
@@ -492,7 +492,7 @@ If ASK is non-nil, ask first."
     (unless (or
              (not (stringp search))
              (string= "" search))	;exit on empty string
-      (case
+      (cl-case
           (if (and org-velocity-force-new (eq last-command-event ?\C-j))
               :force
             (let* ((org-velocity-index (org-velocity-adjust-index))
@@ -503,7 +503,7 @@ If ASK is non-nil, ask first."
         (:prompt (progn
                    (pop-to-buffer (org-velocity-match-buffer))
                    (let ((hint (org-velocity-electric-read-hint)))
-                     (when hint (case hint
+                     (when hint (cl-case hint
                                   (:edit (org-velocity-read nil search))
                                   (:force (org-velocity-create search))
                                   (otherwise (org-velocity-activate-button hint)))))))
@@ -636,7 +636,7 @@ If ASK is non-nil, ask first."
         (completion-no-auto-exit t)
         (crm-separator " "))
     (funcall
-     (case org-velocity-search-method
+     (cl-case org-velocity-search-method
        (phrase #'completing-read)
        (any    #'completing-read-multiple)
        (all    #'completing-read-multiple))
@@ -712,7 +712,7 @@ file. Calling with ARG forces current file."
   (let ((org-velocity-always-use-bucket
          (if arg nil org-velocity-always-use-bucket)))
     ;; complain if inappropriate
-    (assert (org-velocity-bucket-file))
+    (cl-assert (org-velocity-bucket-file))
     (let ((org-velocity-bucket-buffer
            (find-file-noselect (org-velocity-bucket-file))))
       (unwind-protect
