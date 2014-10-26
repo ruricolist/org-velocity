@@ -707,10 +707,16 @@ created named SEARCH.
 If `org-velocity-bucket' is defined and
 `org-velocity-always-use-bucket' is non-nil, then the bucket file
 will be used; otherwise, this will work when called in any Org
-file. Calling with ARG forces current file."
+file.
+
+Calling with ARG reverses which file – the current file or the
+bucket file – to use. If the bucket file would have been used,
+then the current file is used instead, and vice versa."
   (interactive "P")
   (let ((org-velocity-always-use-bucket
-         (if arg nil org-velocity-always-use-bucket)))
+         (if org-velocity-always-use-bucket
+             (not arg)
+           arg)))
     ;; complain if inappropriate
     (cl-assert (org-velocity-bucket-file))
     (let ((org-velocity-bucket-buffer
