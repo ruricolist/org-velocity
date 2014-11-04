@@ -350,9 +350,7 @@ use it."
                     (button-get button 'search)
                     search-ring-max))
   (let ((match (button-get button 'match)))
-    (throw 'org-velocity-done
-           (lambda ()
-             (org-velocity-edit-entry match)))))
+    (throw 'org-velocity-done match)))
 
 (define-button-type 'org-velocity-button
   'action #'org-velocity-visit-button
@@ -719,18 +717,20 @@ then the current file is used instead, and vice versa."
            arg)))
     ;; complain if inappropriate
     (cl-assert (org-velocity-bucket-file))
-    (let ((org-velocity-bucket-buffer
-           (find-file-noselect (org-velocity-bucket-file))))
+    (let* ((org-velocity-bucket-buffer
+            (find-file-noselect (org-velocity-bucket-file)))
+           (dabbrev-search-these-buffers-only
+            (list org-velocity-bucket-buffer)))
       (unwind-protect
-          (let ((dabbrev-search-these-buffers-only
-                 (list (org-velocity-bucket-buffer))))
-            (funcall
-             (catch 'org-velocity-done
-               (org-velocity-engine
-                (if org-velocity-search-is-incremental
-                    (org-velocity-incremental-read "Velocity search: ")
-                  (org-velocity-read-string "Velocity search: " search)))
-               #'ignore)))
+          (let ((match
+                 (catch 'org-velocity-done
+                   (org-velocity-engine
+                    (if org-velocity-search-is-incremental
+                        (org-velocity-incremental-read "Velocity search: ")
+                      (org-velocity-read-string "Velocity search: " search)))
+                   nil)))
+            (when (org-velocity-heading-p match)
+              (org-velocity-edit-entry match)))
         (kill-buffer (org-velocity-match-buffer))))))
 
 (defalias 'org-velocity-read 'org-velocity)
