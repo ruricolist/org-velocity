@@ -325,7 +325,8 @@ use it."
   "Edit entry at HEADING in the original buffer."
   (let ((buffer (org-velocity-heading-buffer heading)))
     (with-current-buffer buffer
-      (org-velocity-narrow-to-entry heading))
+      (org-velocity-narrow-to-entry heading)
+      (goto-char (point-min)))
     (pop-to-buffer buffer)
     (message
      (substitute-command-keys "Narrowed to %s; use \\[widen] to widen")
@@ -340,6 +341,7 @@ use it."
     (with-current-buffer buffer
       (setq org-velocity-saved-winconf winconf)
       (org-velocity-narrow-to-entry heading)
+      (goto-char (point-max))
       (add-hook 'org-ctrl-c-ctrl-c-hook 'org-velocity-dismiss nil t))
     (pop-to-buffer buffer)
     (set (make-local-variable 'header-line-format)
