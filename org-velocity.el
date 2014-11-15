@@ -259,6 +259,7 @@ use it."
             (error "No bucket and not an Org file"))))))
 
 (defvar org-velocity-bucket-buffer nil)
+(defvar org-velocity-starting-buffer nil)
 
 (defsubst org-velocity-bucket-buffer ()
   (or org-velocity-bucket-buffer
@@ -310,6 +311,33 @@ use it."
 (make-variable-buffer-local 'org-velocity-saved-winconf)
 
 (defun org-velocity-edit-entry (heading)
+  (if (eq (org-velocity-heading-buffer heading)
+          org-velocity-starting-buffer)
+      (org-velocity-edit-entry/inline heading)
+    (org-velocity-edit-entry/indirect heading)))
+
+(defun org-velocity-narrow-to-entry (heading)
+  (goto-char (org-velocity-heading-position heading))
+  (let ((start (point))
+        (end (save-excursion
+               (org-end-of-subtree t)
+               (point))))
+    ;; Outline view and narrow-to-region interact poorly.
+    (outline-flag-region start end nil)
+    (narrow-to-region start end)
+    (goto-char (point-max))))
+
+(defun org-velocity-edit-entry/inline (heading)
+  "Edit entry at HEADING in the original buffer."
+  (let ((buffer (org-velocity-heading-buffer heading)))
+    (with-current-buffer buffer
+      (org-velocity-narrow-to-entry heading))
+    (pop-to-buffer buffer)
+    (message
+     (substitute-command-keys "Narrowed to %s; use \\[widen] to widen")
+     (org-velocity-heading-name heading))))
+
+(defun org-velocity-edit-entry/indirect (heading)
   "Edit entry at HEADING in an indirect buffer."
   (let ((winconf (current-window-configuration))
         (buffer (org-velocity-make-indirect-buffer heading))
@@ -317,15 +345,7 @@ use it."
         (inhibit-field-text-motion t))
     (with-current-buffer buffer
       (setq org-velocity-saved-winconf winconf)
-      (goto-char (org-velocity-heading-position heading))
-      (let ((start (point))
-            (end (save-excursion
-                   (org-end-of-subtree t)
-                   (point))))
-        ;; Outline view and narrow-to-region interact poorly.
-        (outline-flag-region start end nil)
-        (narrow-to-region start end))
-      (goto-char (point-max))
+      (org-velocity-narrow-to-entry heading)
       (add-hook 'org-ctrl-c-ctrl-c-hook 'org-velocity-dismiss nil t))
     (pop-to-buffer buffer)
     (set (make-local-variable 'header-line-format)
@@ -441,6 +461,7 @@ Return matches."
                 truncate-lines t))
         (prog1
             (with-current-buffer (org-velocity-bucket-buffer)
+              (widen)
               (let ((inhibit-point-motion-hooks t)
                     (inhibit-field-text-motion t))
                 (save-excursion
@@ -717,7 +738,8 @@ then the current file is used instead, and vice versa."
            arg)))
     ;; complain if inappropriate
     (cl-assert (org-velocity-bucket-file))
-    (let* ((org-velocity-bucket-buffer
+    (let* ((org-velocity-starting-buffer (current-buffer))
+           (org-velocity-bucket-buffer
             (find-file-noselect (org-velocity-bucket-file)))
            (dabbrev-search-these-buffers-only
             (list org-velocity-bucket-buffer)))
