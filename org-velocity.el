@@ -318,14 +318,8 @@ use it."
 
 (defun org-velocity-narrow-to-entry (heading)
   (goto-char (org-velocity-heading-position heading))
-  (let ((start (point))
-        (end (save-excursion
-               (org-end-of-subtree t)
-               (point))))
-    ;; Outline view and narrow-to-region interact poorly.
-    (outline-flag-region start end nil)
-    (narrow-to-region start end)
-    (goto-char (point-max))))
+  (org-narrow-to-subtree)
+  (show-all))
 
 (defun org-velocity-edit-entry/inline (heading)
   "Edit entry at HEADING in the original buffer."
