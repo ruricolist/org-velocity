@@ -4,7 +4,7 @@
 
 ;; Author: Paul M. Rodriguez <paulmrodriguez@gmail.com>
 ;; Created: 2010-05-05
-;; Version: 4.0
+;; Version: 4.1
 
 ;; This file is not part of GNU Emacs.
 
@@ -168,20 +168,27 @@ See the documentation for `org-capture-templates'."
 The length of the preview is determined by `window-width'.
 
 Replace all contiguous whitespace with single spaces."
-  (let ((start (progn
-                 (forward-line 1)
-                 (if (looking-at org-property-start-re)
-                     (re-search-forward org-property-end-re)
-                   (1- (point))))))
-    (mapconcat
-     #'identity
-     (split-string
-      (buffer-substring-no-properties
-       start
-       (min
-        (+ start (window-width))
-        (point-max))))
-     " ")))
+  (let* ((start (progn
+                  (forward-line 1)
+                  (if (looking-at org-property-start-re)
+                      (re-search-forward org-property-end-re)
+                    (1- (point)))))
+         (string+props (buffer-substring
+                        start
+                        (min
+                         (+ start (window-width))
+                         (point-max)))))
+    ;; We want to preserve the text properties so that, for example,
+    ;; we don't end up with the raw text of links in the preview.
+    (with-temp-buffer
+      (insert string+props)
+      (goto-char (point-min))
+      (save-match-data
+        (while (re-search-forward split-string-default-separators
+                                  (point-max)
+                                  t)
+          (replace-match " ")))
+      (buffer-string))))
 
 (cl-defstruct org-velocity-heading buffer position name level preview)
 
