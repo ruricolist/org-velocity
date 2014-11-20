@@ -78,12 +78,6 @@
   :group 'org-velocity
   :type 'file)
 
-(defcustom org-velocity-search-is-incremental t
-  "Show results incrementally when possible?"
-  :group 'org-velocity
-  :type 'boolean
-  :safe 'booleanp)
-
 (defcustom org-velocity-show-previews t
   "Show previews of the text of each heading?"
   :group 'velocity
@@ -323,21 +317,18 @@ use it."
       (org-velocity-edit-entry/inline heading)
     (org-velocity-edit-entry/indirect heading)))
 
-(defun org-velocity-narrow-to-entry (heading)
+(cl-defun org-velocity-goto-entry (heading &key (narrow t))
   (goto-char (org-velocity-heading-position heading))
-  (org-narrow-to-subtree)
+  (when narrow
+    (org-narrow-to-subtree))
   (show-all))
 
 (defun org-velocity-edit-entry/inline (heading)
   "Edit entry at HEADING in the original buffer."
   (let ((buffer (org-velocity-heading-buffer heading)))
     (with-current-buffer buffer
-      (org-velocity-narrow-to-entry heading)
-      (goto-char (point-min)))
-    (pop-to-buffer buffer)
-    (message
-     (substitute-command-keys "Narrowed to %s; use \\[widen] to widen")
-     (org-velocity-heading-name heading))))
+      (org-velocity-goto-entry :narrow nil))
+    (pop-to-buffer buffer)))
 
 (defun org-velocity-edit-entry/indirect (heading)
   "Edit entry at HEADING in an indirect buffer."
@@ -347,7 +338,7 @@ use it."
         (inhibit-field-text-motion t))
     (with-current-buffer buffer
       (setq org-velocity-saved-winconf winconf)
-      (org-velocity-narrow-to-entry heading)
+      (org-velocity-goto-entry heading)
       (goto-char (point-max))
       (add-hook 'org-ctrl-c-ctrl-c-hook 'org-velocity-dismiss nil t))
     (pop-to-buffer buffer)
@@ -411,40 +402,39 @@ use it."
           (org-velocity-present-match
            (unless hide-hints (car hints))
            match)
+          (setq hints (cdr hints))
           (push match matches))
-        (setq hints (cdr hints))
         (unless (re-search-forward (org-velocity-heading-regexp) nil t)
-          (return))))
+          (cl-return))))
     (nreverse matches)))
 
-(cl-defun org-velocity-all-search (search &optional hide-hints)
+(defun org-velocity-all-search (search &optional hide-hints)
   "Display only entries containing every word in SEARCH."
-  (let ((keywords (mapcar 'regexp-quote (split-string search)))
+  (let ((keywords
+         (cl-loop for word in (split-string search)
+                  collect (concat "\\<" (regexp-quote word) "\\>")))
         (hints org-velocity-index)
         matches)
-    (org-map-entries
-     (lambda ()
-       ;; Return if we've run out of hints.
-       (when (null hints)
-         (return-from org-velocity-all-search (nreverse matches)))
-       ;; Only search the subtree once.
-       (setq org-map-continue-from
-             (save-excursion
-               (goto-char (line-end-position))
-               (if (re-search-forward (org-velocity-heading-regexp) nil t)
-                   (line-end-position)
-                 (point-max))))
-       (when (cl-loop for word in keywords
-                      always (save-excursion
-                               (re-search-forward
-                                (concat "\\<" word "\\>")
-                                org-map-continue-from t)))
-         (let ((match (org-velocity-nearest-heading (match-end 0))))
-           (org-velocity-present-match
-            (unless hide-hints (car hints))
-            match)
-           (push match matches)
-           (setq hints (cdr hints))))))
+    (cl-block nil
+      (org-map-entries
+       (lambda ()
+         ;; Return if we've run out of hints.
+         (unless hints
+           (cl-return))
+         ;; Only search the subtree once.
+         (setq org-map-continue-from
+               (save-excursion
+                 (org-end-of-subtree)
+                 (point)))
+         (when (cl-loop for word in keywords
+                        always (save-excursion
+                                 (re-search-forward word org-map-continue-from t)))
+           (let ((match (org-velocity-nearest-heading (match-end 0))))
+             (org-velocity-present-match
+              (unless hide-hints (car hints))
+              match)
+             (setq hints (cdr hints))
+             (push match matches))))))
     (nreverse matches)))
 
 (cl-defun org-velocity-present (search &key hide-hints)
@@ -469,7 +459,7 @@ Return matches."
                     (inhibit-field-text-motion t))
                 (save-excursion
                   (org-velocity-beginning-of-headings)
-                  (cl-case org-velocity-search-method
+                  (cl-ecase org-velocity-search-method
                     (all (org-velocity-all-search search hide-hints))
                     (phrase (org-velocity-generic-search
                              (concat "\\<" (regexp-quote search))
@@ -657,30 +647,9 @@ If ASK is non-nil, ask first."
          org-velocity-local-completion-map)
         (completion-no-auto-exit t)
         (crm-separator " "))
-    (funcall
-     (cl-case org-velocity-search-method
-       (phrase #'completing-read)
-       (any    #'completing-read-multiple)
-       (all    #'completing-read-multiple))
-     prompt
-     (completion-table-dynamic
-      'org-velocity-dabbrev-completion-list))))
-
-(defun org-velocity-read-string (prompt &optional initial-input)
-  "Read string with PROMPT followed by INITIAL-INPUT."
-  ;; The use of initial inputs to the minibuffer is deprecated (see
-  ;; `read-from-minibuffer'), but in this case it is the user-friendly
-  ;; thing to do.
-  (minibuffer-with-setup-hook
-      (let ((initial-input initial-input))
-        (lambda ()
-          (and initial-input (insert initial-input))
-          (goto-char (point-max))))
-    (if (eq org-velocity-search-method 'regexp)
-        (read-regexp prompt)
-      (if org-velocity-use-completion
-          (org-velocity-read-with-completion prompt)
-        (read-string prompt)))))
+    (completing-read prompt
+                     (completion-table-dynamic
+                      'org-velocity-dabbrev-completion-list))))
 
 (cl-defun org-velocity-adjust-index
     (&optional (match-window (org-velocity-match-window)))
@@ -750,9 +719,7 @@ then the current file is used instead, and vice versa."
           (let ((match
                  (catch 'org-velocity-done
                    (org-velocity-engine
-                    (if org-velocity-search-is-incremental
-                        (org-velocity-incremental-read "Velocity search: ")
-                      (org-velocity-read-string "Velocity search: " search)))
+                    (org-velocity-incremental-read "Velocity search: "))
                    nil)))
             (when (org-velocity-heading-p match)
               (org-velocity-edit-entry match)))
