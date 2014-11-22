@@ -260,7 +260,7 @@ use it."
             (error "No bucket and not an Org file"))))))
 
 (defvar org-velocity-bucket-buffer nil)
-(defvar org-velocity-starting-buffer nil)
+(defvar org-velocity-navigating nil)
 
 (defsubst org-velocity-bucket-buffer ()
   (or org-velocity-bucket-buffer
@@ -272,9 +272,6 @@ use it."
 
 (defsubst org-velocity-match-window ()
   (get-buffer-window (org-velocity-match-buffer)))
-
-(defsubst org-velocity-match-staging-buffer ()
-  (get-buffer-create " Velocity matches"))
 
 (defun org-velocity-beginning-of-headings ()
   "Goto the start of the first heading."
@@ -312,23 +309,23 @@ use it."
 (make-variable-buffer-local 'org-velocity-saved-winconf)
 
 (defun org-velocity-edit-entry (heading)
-  (if (eq (org-velocity-heading-buffer heading)
-          org-velocity-starting-buffer)
+  (if org-velocity-navigating
       (org-velocity-edit-entry/inline heading)
     (org-velocity-edit-entry/indirect heading)))
 
-(cl-defun org-velocity-goto-entry (heading &key (narrow t))
+(cl-defun org-velocity-goto-entry (heading &key narrow)
   (goto-char (org-velocity-heading-position heading))
-  (when narrow
-    (org-narrow-to-subtree))
-  (show-all))
+  (save-excursion
+    (when narrow
+      (org-narrow-to-subtree))
+    (show-all)))
 
 (defun org-velocity-edit-entry/inline (heading)
   "Edit entry at HEADING in the original buffer."
   (let ((buffer (org-velocity-heading-buffer heading)))
+    (pop-to-buffer buffer)
     (with-current-buffer buffer
-      (org-velocity-goto-entry :narrow nil))
-    (pop-to-buffer buffer)))
+      (org-velocity-goto-entry heading))))
 
 (defun org-velocity-edit-entry/indirect (heading)
   "Edit entry at HEADING in an indirect buffer."
@@ -338,7 +335,7 @@ use it."
         (inhibit-field-text-motion t))
     (with-current-buffer buffer
       (setq org-velocity-saved-winconf winconf)
-      (org-velocity-goto-entry heading)
+      (org-velocity-goto-entry heading :narrow t)
       (goto-char (point-max))
       (add-hook 'org-ctrl-c-ctrl-c-hook 'org-velocity-dismiss nil t))
     (pop-to-buffer buffer)
@@ -386,8 +383,8 @@ use it."
       (org-velocity-heading-preview heading)
       'face 'shadow))))
 
-(defsubst org-velocity-present-match (hint match)
-  (with-current-buffer (org-velocity-match-staging-buffer)
+(cl-defsubst org-velocity-present-match (hint match)
+  (with-current-buffer (org-velocity-match-buffer)
     (when hint (insert "#" hint " "))
     (org-velocity-buttonize match)
     (org-velocity-insert-preview match)
@@ -443,41 +440,41 @@ If HIDE-HINTS is non-nil, display entries without indices. SEARCH
 binds `org-velocity-search'.
 
 Return matches."
-  (if (and (stringp search) (not (string= "" search)))
-      ;; Fold case when the search string is all lowercase.
-      (let ((case-fold-search (equal search (downcase search)))
-            (truncate-partial-width-windows t))
-        (with-current-buffer (org-velocity-match-buffer)
-          (erase-buffer)
-          ;; Permanent locals.
-          (setq cursor-type nil
-                truncate-lines t))
-        (prog1
-            (with-current-buffer (org-velocity-bucket-buffer)
-              (widen)
-              (let ((inhibit-point-motion-hooks t)
-                    (inhibit-field-text-motion t))
-                (save-excursion
-                  (org-velocity-beginning-of-headings)
-                  (cl-ecase org-velocity-search-method
-                    (all (org-velocity-all-search search hide-hints))
-                    (phrase (org-velocity-generic-search
-                             (concat "\\<" (regexp-quote search))
-                             hide-hints))
-                    (any (org-velocity-generic-search
-                          (concat "\\<"
-                                  (regexp-opt (split-string search)))
-                          hide-hints))
-                    (regexp (condition-case lossage
-                                (org-velocity-generic-search
-                                 search hide-hints)
-                              (invalid-regexp
-                               (minibuffer-message "%s" lossage))))))))
-          (with-current-buffer (org-velocity-match-buffer)
-            (buffer-swap-text (org-velocity-match-staging-buffer))
-            (goto-char (point-min)))))
-    (with-current-buffer (org-velocity-match-buffer)
-      (erase-buffer))))
+  (let ((match-buffer (org-velocity-match-buffer)))
+    (if (and (stringp search) (not (string= "" search)))
+        ;; Fold case when the search string is all lowercase.
+        (let ((case-fold-search (equal search (downcase search)))
+              (truncate-partial-width-windows t))
+          (with-current-buffer match-buffer
+            (erase-buffer)
+            ;; Permanent locals.
+            (setq cursor-type nil
+                  truncate-lines t))
+          (prog1
+              (with-current-buffer (org-velocity-bucket-buffer)
+                (widen)
+                (let ((inhibit-point-motion-hooks t)
+                      (inhibit-field-text-motion t))
+                  (save-excursion
+                    (org-velocity-beginning-of-headings)
+                    (cl-ecase org-velocity-search-method
+                      (all (org-velocity-all-search search hide-hints))
+                      (phrase (org-velocity-generic-search
+                               (concat "\\<" (regexp-quote search))
+                               hide-hints))
+                      (any (org-velocity-generic-search
+                            (concat "\\<"
+                                    (regexp-opt (split-string search)))
+                            hide-hints))
+                      (regexp (condition-case lossage
+                                  (org-velocity-generic-search
+                                   search hide-hints)
+                                (invalid-regexp
+                                 (minibuffer-message "%s" lossage))))))))
+            (with-current-buffer match-buffer
+              (goto-char (point-min)))))
+      (with-current-buffer match-buffer
+        (erase-buffer)))))
 
 (defun org-velocity-store-link ()
   "Function for `org-store-link-functions'."
@@ -710,16 +707,23 @@ then the current file is used instead, and vice versa."
            arg)))
     ;; complain if inappropriate
     (cl-assert (org-velocity-bucket-file))
-    (let* ((org-velocity-starting-buffer (current-buffer))
+    (let* ((starting-buffer (current-buffer))
            (org-velocity-bucket-buffer
             (find-file-noselect (org-velocity-bucket-file)))
+           (org-velocity-navigating
+            (eq starting-buffer org-velocity-bucket-buffer))
+           (org-velocity-heading-level
+            (if org-velocity-navigating
+                0
+              org-velocity-heading-level))
            (dabbrev-search-these-buffers-only
             (list org-velocity-bucket-buffer)))
       (unwind-protect
           (let ((match
                  (catch 'org-velocity-done
                    (org-velocity-engine
-                    (org-velocity-incremental-read "Velocity search: "))
+                    (or search
+                        (org-velocity-incremental-read "Velocity search: ")))
                    nil)))
             (when (org-velocity-heading-p match)
               (org-velocity-edit-entry match)))
