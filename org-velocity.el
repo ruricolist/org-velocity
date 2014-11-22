@@ -327,6 +327,10 @@ use it."
     (with-current-buffer buffer
       (org-velocity-goto-entry heading))))
 
+(defun org-velocity-format-header-line (control-string &rest args)
+  (set (make-local-variable 'header-line-format)
+       (apply #'format control-string args)))
+
 (defun org-velocity-edit-entry/indirect (heading)
   "Edit entry at HEADING in an indirect buffer."
   (let ((winconf (current-window-configuration))
@@ -339,11 +343,11 @@ use it."
       (goto-char (point-max))
       (add-hook 'org-ctrl-c-ctrl-c-hook 'org-velocity-dismiss nil t))
     (pop-to-buffer buffer)
-    (set (make-local-variable 'header-line-format)
-         (format "%s Use C-c C-c to finish."
-                 (abbreviate-file-name
-                  (buffer-file-name
-                   (org-velocity-heading-buffer heading)))))))
+    (org-velocity-format-header-line
+     "%s Use C-c C-c to finish."
+     (abbreviate-file-name
+      (buffer-file-name
+       (org-velocity-heading-buffer heading))))))
 
 (defun org-velocity-dismiss ()
   "Save current entry and close indirect buffer."
@@ -440,7 +444,10 @@ If HIDE-HINTS is non-nil, display entries without indices. SEARCH
 binds `org-velocity-search'.
 
 Return matches."
-  (let ((match-buffer (org-velocity-match-buffer)))
+  (let ((match-buffer (org-velocity-match-buffer))
+        (bucket-buffer (org-velocity-bucket-buffer))
+        (search-method org-velocity-search-method)
+        (navigating? org-velocity-navigating))
     (if (and (stringp search) (not (string= "" search)))
         ;; Fold case when the search string is all lowercase.
         (let ((case-fold-search (equal search (downcase search)))
@@ -449,15 +456,20 @@ Return matches."
             (erase-buffer)
             ;; Permanent locals.
             (setq cursor-type nil
-                  truncate-lines t))
+                  truncate-lines t)
+            (org-velocity-format-header-line
+             "%s search in %s (%s mode)"
+             (capitalize (symbol-name search-method))
+             (abbreviate-file-name (buffer-file-name bucket-buffer))
+             (if navigating? "nav" "notes")))
           (prog1
-              (with-current-buffer (org-velocity-bucket-buffer)
+              (with-current-buffer bucket-buffer
                 (widen)
                 (let ((inhibit-point-motion-hooks t)
                       (inhibit-field-text-motion t))
                   (save-excursion
                     (org-velocity-beginning-of-headings)
-                    (cl-ecase org-velocity-search-method
+                    (cl-ecase search-method
                       (all (org-velocity-all-search search hide-hints))
                       (phrase (org-velocity-generic-search
                                (concat "\\<" (regexp-quote search))
