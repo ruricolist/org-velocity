@@ -624,7 +624,7 @@ If ASK is non-nil, ask first."
            (matches (org-velocity-present search :hide-hints t)))
       (cond ((null matches)
              (select-window (active-minibuffer-window))
-             (unless (or (null search) (string= "" search))
+             (unless (or (null search) (= (length search) 0))
                (minibuffer-message "No match; RET to create")))
             ((and (null (cdr matches))
                   org-velocity-exit-on-match)
