@@ -387,7 +387,7 @@ use it."
       (org-velocity-heading-preview heading)
       'face 'shadow))))
 
-(cl-defsubst org-velocity-present-match (hint match)
+(defsubst org-velocity-present-match (hint match)
   (with-current-buffer (org-velocity-match-buffer)
     (when hint (insert "#" hint " "))
     (org-velocity-buttonize match)
