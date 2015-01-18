@@ -237,6 +237,9 @@ of the base buffer; in the latter, return the file name of
   (if (active-minibuffer-window)
       (with-current-buffer (window-buffer (active-minibuffer-window))
         (minibuffer-contents))))
+  (when (active-minibuffer-window)
+    (with-current-buffer (window-buffer (active-minibuffer-window))
+      (minibuffer-contents))))
 
 (defun org-velocity-bucket-file ()
   "Return the proper file for Org-Velocity to search.
@@ -438,6 +441,21 @@ use it."
              (push match matches))))))
     (nreverse matches)))
 
+(cl-defun org-velocity-update-match-header (&key (match-buffer (org-velocity-match-buffer))
+                                                 (bucket-buffer (org-velocity-bucket-buffer))
+                                                 (search-method org-velocity-search-method))
+  (let ((navigating? org-velocity-navigating)
+        (recursive? org-velocity-recursive-search))
+    (with-current-buffer match-buffer
+      (org-velocity-format-header-line
+       "%s search in %s (%s mode)%s"
+       (capitalize (symbol-name search-method))
+       (abbreviate-file-name (buffer-file-name bucket-buffer))
+       (if navigating? "nav" "notes")
+       (if (not recursive?)
+           ""
+         (format " (recursive on %S)" (reverse recursive?)))))))
+
 (cl-defun org-velocity-present (search &key hide-hints)
   "Buttonize matches for SEARCH in `org-velocity-match-buffer'.
 If HIDE-HINTS is non-nil, display entries without indices. SEARCH
@@ -457,11 +475,10 @@ Return matches."
             ;; Permanent locals.
             (setq cursor-type nil
                   truncate-lines t)
-            (org-velocity-format-header-line
-             "%s search in %s (%s mode)"
-             (capitalize (symbol-name search-method))
-             (abbreviate-file-name (buffer-file-name bucket-buffer))
-             (if navigating? "nav" "notes")))
+            (org-velocity-update-match-header
+             :match-buffer match-buffer
+             :bucket-buffer bucket-buffer
+             :search-method search-method))
           (prog1
               (with-current-buffer bucket-buffer
                 (widen)
