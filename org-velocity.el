@@ -234,12 +234,16 @@ of the base buffer; in the latter, return the file name of
 
 (defun org-velocity-minibuffer-contents ()
   "Return the contents of the minibuffer when it is active."
-  (if (active-minibuffer-window)
-      (with-current-buffer (window-buffer (active-minibuffer-window))
-        (minibuffer-contents))))
   (when (active-minibuffer-window)
     (with-current-buffer (window-buffer (active-minibuffer-window))
       (minibuffer-contents))))
+
+(defun org-velocity-nix-minibuffer ()
+  "Return the contents of the minibuffer and clear it."
+  (when (active-minibuffer-window)
+    (with-current-buffer (window-buffer (active-minibuffer-window))
+      (prog1 (minibuffer-contents)
+        (delete-minibuffer-contents)))))
 
 (defun org-velocity-bucket-file ()
   "Return the proper file for Org-Velocity to search.
@@ -390,6 +394,60 @@ use it."
       (org-velocity-heading-preview heading)
       'face 'shadow))))
 
+(defvar org-velocity-recursive-headings nil)
+(defvar org-velocity-recursive-search nil)
+
+(cl-defun org-velocity-search-with (fun style search
+                                        &key (headings org-velocity-recursive-headings))
+  (if headings
+      (save-restriction
+        (dolist (heading headings)
+          (widen)
+          (let ((start (org-velocity-heading-position heading)))
+            (goto-char start)
+            (let ((end (save-excursion
+                         (org-end-of-subtree)
+                         (point))))
+              (narrow-to-region start end)
+              (org-velocity-search-with fun style search
+                                        :headings nil)))))
+    (cl-ecase style
+      ((phrase any regexp)
+       (cl-block nil
+         (while (re-search-forward search nil t)
+           (let ((match (org-velocity-nearest-heading (point))))
+             (funcall fun match))
+           ;; Skip to the next heading.
+           (unless (re-search-forward (org-velocity-heading-regexp) nil t)
+             (cl-return)))))
+      ((all)
+       (let ((keywords
+              (cl-loop for word in (split-string search)
+                       collect (concat "\\<" (regexp-quote word) "\\>"))))
+         (org-map-entries
+          (lambda ()
+            ;; Only search the subtree once.
+            (setq org-map-continue-from
+                  (save-excursion
+                    (org-end-of-subtree)
+                    (point)))
+            (when (cl-loop for word in keywords
+                           always (save-excursion
+                                    (re-search-forward word org-map-continue-from t)))
+              (let ((match (org-velocity-nearest-heading (match-end 0))))
+                (funcall fun match))))))))))
+
+(defun org-velocity-all-results (style search)
+  (with-current-buffer (org-velocity-bucket-buffer)
+    (save-excursion
+      (goto-char (point-min))
+      (let (matches)
+        (org-velocity-search-with (lambda (match)
+                                    (push match matches))
+                                  style
+                                  search)
+        (nreverse matches)))))
+
 (defsubst org-velocity-present-match (hint match)
   (with-current-buffer (org-velocity-match-buffer)
     (when hint (insert "#" hint " "))
@@ -397,49 +455,36 @@ use it."
     (org-velocity-insert-preview match)
     (newline)))
 
-(defun org-velocity-generic-search (search &optional hide-hints)
-  "Display any entry containing SEARCH."
+(defun org-velocity-present-search (style search hide-hints)
   (let ((hints org-velocity-index) matches)
     (cl-block nil
-      (while (and hints (re-search-forward search nil t))
-        (let ((match (org-velocity-nearest-heading (point))))
-          (org-velocity-present-match
-           (unless hide-hints (car hints))
-           match)
-          (setq hints (cdr hints))
-          (push match matches))
-        (unless (re-search-forward (org-velocity-heading-regexp) nil t)
-          (cl-return))))
+      (org-velocity-search-with (lambda (match)
+                                  (unless hints
+                                    (cl-return))
+                                  (let ((hint (if hide-hints
+                                                  nil
+                                                (car hints))))
+                                    (org-velocity-present-match hint match))
+                                  (pop hints)
+                                  (push match matches))
+                                style
+                                search))
     (nreverse matches)))
 
-(defun org-velocity-all-search (search &optional hide-hints)
-  "Display only entries containing every word in SEARCH."
-  (let ((keywords
-         (cl-loop for word in (split-string search)
-                  collect (concat "\\<" (regexp-quote word) "\\>")))
-        (hints org-velocity-index)
-        matches)
-    (cl-block nil
-      (org-map-entries
-       (lambda ()
-         ;; Return if we've run out of hints.
-         (unless hints
-           (cl-return))
-         ;; Only search the subtree once.
-         (setq org-map-continue-from
-               (save-excursion
-                 (org-end-of-subtree)
-                 (point)))
-         (when (cl-loop for word in keywords
-                        always (save-excursion
-                                 (re-search-forward word org-map-continue-from t)))
-           (let ((match (org-velocity-nearest-heading (match-end 0))))
-             (org-velocity-present-match
-              (unless hide-hints (car hints))
-              match)
-             (setq hints (cdr hints))
-             (push match matches))))))
-    (nreverse matches)))
+(defun org-velocity-restrict-search ()
+  (interactive)
+  (let ((search (org-velocity-nix-minibuffer)))
+    (when (equal search "")
+      (error "No search to restrict to"))
+    (push search org-velocity-recursive-search)
+    (setq org-velocity-recursive-headings
+          (org-velocity-all-results
+           org-velocity-search-method
+           search))
+    ;; TODO We could extend the current search instead of starting
+    ;; over.
+    (org-velocity-update-match-header)
+    (minibuffer-message "Restricting search to %s" search)))
 
 (cl-defun org-velocity-update-match-header (&key (match-buffer (org-velocity-match-buffer))
                                                  (bucket-buffer (org-velocity-bucket-buffer))
@@ -448,13 +493,14 @@ use it."
         (recursive? org-velocity-recursive-search))
     (with-current-buffer match-buffer
       (org-velocity-format-header-line
-       "%s search in %s (%s mode)%s"
+       "%s search in %s%s (%s mode)"
        (capitalize (symbol-name search-method))
        (abbreviate-file-name (buffer-file-name bucket-buffer))
-       (if navigating? "nav" "notes")
        (if (not recursive?)
            ""
-         (format " (recursive on %S)" (reverse recursive?)))))))
+         (let ((sep " > "))
+           (concat sep (string-join (reverse recursive?) sep))))
+       (if navigating? "nav" "notes")))))
 
 (cl-defun org-velocity-present (search &key hide-hints)
   "Buttonize matches for SEARCH in `org-velocity-match-buffer'.
@@ -464,8 +510,7 @@ binds `org-velocity-search'.
 Return matches."
   (let ((match-buffer (org-velocity-match-buffer))
         (bucket-buffer (org-velocity-bucket-buffer))
-        (search-method org-velocity-search-method)
-        (navigating? org-velocity-navigating))
+        (search-method org-velocity-search-method))
     (if (and (stringp search) (not (string= "" search)))
         ;; Fold case when the search string is all lowercase.
         (let ((case-fold-search (equal search (downcase search)))
@@ -483,23 +528,19 @@ Return matches."
               (with-current-buffer bucket-buffer
                 (widen)
                 (let ((inhibit-point-motion-hooks t)
-                      (inhibit-field-text-motion t))
+                      (inhibit-field-text-motion t)
+                      (search
+                       (cl-ecase search-method
+                         (all search)
+                         (phrase (concat "\\<" (regexp-quote search)))
+                         (any (concat "\\<" (regexp-opt (split-string search))))
+                         (regexp search))))
                   (save-excursion
                     (org-velocity-beginning-of-headings)
-                    (cl-ecase search-method
-                      (all (org-velocity-all-search search hide-hints))
-                      (phrase (org-velocity-generic-search
-                               (concat "\\<" (regexp-quote search))
-                               hide-hints))
-                      (any (org-velocity-generic-search
-                            (concat "\\<"
-                                    (regexp-opt (split-string search)))
-                            hide-hints))
-                      (regexp (condition-case lossage
-                                  (org-velocity-generic-search
-                                   search hide-hints)
-                                (invalid-regexp
-                                 (minibuffer-message "%s" lossage))))))))
+                    (condition-case lossage
+                        (org-velocity-present-search search-method search hide-hints)
+                      (invalid-regexp
+                       (minibuffer-message "%s" lossage))))))
             (with-current-buffer match-buffer
               (goto-char (point-min)))))
       (with-current-buffer match-buffer
@@ -664,6 +705,8 @@ If ASK is non-nil, ask first."
     (set-keymap-parent map minibuffer-local-completion-map)
     (define-key map " " 'self-insert-command)
     (define-key map [remap minibuffer-complete] 'minibuffer-complete-word)
+    (define-key map [(control ?@)] 'org-velocity-restrict-search)
+    (define-key map [(control ?\s)] 'org-velocity-restrict-search)
     map)
   "Keymap for completion with `completing-read'.")
 
@@ -741,6 +784,8 @@ then the current file is used instead, and vice versa."
             (find-file-noselect (org-velocity-bucket-file)))
            (org-velocity-navigating
             (eq starting-buffer org-velocity-bucket-buffer))
+           (org-velocity-recursive-headings '())
+           (org-velocity-recursive-search '())
            (org-velocity-heading-level
             (if org-velocity-navigating
                 0
