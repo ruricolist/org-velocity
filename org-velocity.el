@@ -704,6 +704,7 @@ If ASK is non-nil, ask first."
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-completion-map)
     (define-key map " " 'self-insert-command)
+    (define-key map "?" 'self-insert-command)
     (define-key map [remap minibuffer-complete] 'minibuffer-complete-word)
     (define-key map [(control ?@)] 'org-velocity-restrict-search)
     (define-key map [(control ?\s)] 'org-velocity-restrict-search)
