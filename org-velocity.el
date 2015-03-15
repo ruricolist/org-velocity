@@ -527,14 +527,20 @@ Return matches."
           (prog1
               (with-current-buffer bucket-buffer
                 (widen)
-                (let ((inhibit-point-motion-hooks t)
-                      (inhibit-field-text-motion t)
-                      (search
-                       (cl-ecase search-method
-                         (all search)
-                         (phrase (concat "\\<" (regexp-quote search)))
-                         (any (concat "\\<" (regexp-opt (split-string search))))
-                         (regexp search))))
+                (let* ((inhibit-point-motion-hooks t)
+                       (inhibit-field-text-motion t)
+                       (anchored? (string-match-p "^\\s-" search))
+                       (search
+                        (cl-ecase search-method
+                          (all search)
+                          (phrase
+                           (if anchored?
+                               (regexp-quote search)
+                             ;; Anchor the search to the start of a word.
+                             (concat "\\<" (regexp-quote search))))
+                          (any
+                           (concat "\\<" (regexp-opt (split-string search))))
+                          (regexp search))))
                   (save-excursion
                     (org-velocity-beginning-of-headings)
                     (condition-case lossage
