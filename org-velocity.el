@@ -341,10 +341,12 @@ use it."
 (defun org-velocity-edit-entry/indirect (heading)
   "Edit entry at HEADING in an indirect buffer."
   (let ((winconf (current-window-configuration))
+        (dd default-directory)
         (buffer (org-velocity-make-indirect-buffer heading))
         (inhibit-point-motion-hooks t)
         (inhibit-field-text-motion t))
     (with-current-buffer buffer
+      (setq default-directory dd)       ;Inherit default directory.
       (setq org-velocity-saved-winconf winconf)
       (org-velocity-goto-entry heading :narrow t)
       (goto-char (point-max))
