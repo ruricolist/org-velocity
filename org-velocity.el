@@ -66,6 +66,8 @@
 (require 'dabbrev)
 (require 'cl-lib)
 
+(declare-function evil-make-overriding-map "evil-core")
+
 (defgroup org-velocity nil
   "Notational Velocity-style interface for Org."
   :tag "Org-Velocity"
