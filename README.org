@@ -1,23 +1,3 @@
 This the development version of org-velocity.
 
-** Nav mode
-
-There seems to be a split among users of org-velocity between those
-who use it for note-taking (myself included) and those who use it for
-navigation.
-
-I’ve tried to address this by giving org-velocity different default
-behaviors depending on whether the buffer /being searched/ is also the
-/current/ buffer. With the current buffer, we display the innermost headers, narrow to the matching subtrees in the same buffer.
-
-** Restricting the search
-
-Ido has a feature I find very useful: while searching, you can use
-~C-space~ to restrict further searching to the current matches.
-
-This version of org-velocity supports the same feature, also bound to
-~C-space~.
-
-(Bear in mind that, for the purposes of creating a new entry, only the
-last item searched for is the title for the new entry; restrictions
-are not used.)
+The principal difference here from the version currently in contrib is that we no longer rely on org-capture to create new notes. This makes things considerably simpler and more reliable.
