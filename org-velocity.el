@@ -4,7 +4,7 @@
 
 ;; Author: Paul M. Rodriguez <paulmrodriguez@gmail.com>
 ;; Created: 2010-05-05
-;; Version: 4.1
+;; Version: 4.2
 
 ;; This file is not part of GNU Emacs.
 
