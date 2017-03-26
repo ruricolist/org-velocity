@@ -135,19 +135,6 @@ file."
           (const :tag "Match a regular expression" regexp))
   :safe (lambda (v) (memq v '(phrase any all regexp))))
 
-(defcustom org-velocity-capture-templates
-  '(("v"
-     "Velocity entry"
-     entry
-     (file "")
-     "* %:search\n\n%i%?"))
-  "Use these template with `org-capture'.
-Meanwhile `org-default-notes-file' is bound to `org-velocity-bucket-file'.
-The keyword :search inserts the current search.
-See the documentation for `org-capture-templates'."
-  :group 'org-velocity
-  :type (or (get 'org-capture-templates 'custom-type) 'list))
-
 (defcustom org-velocity-heading-level 1
   "Only match headings at this level or higher.
 0 means to match headings at any level."
@@ -303,17 +290,6 @@ use it."
        (generate-new-buffer-name (org-velocity-heading-name heading))
        t))))
 
-(defun org-velocity-capture ()
-  "Record a note with `org-capture'."
-  (let ((org-capture-templates
-         org-velocity-capture-templates))
-    (org-capture nil
-                 ;; This is no longer automatically selected.
-                 (when (null (cdr org-capture-templates))
-                   (caar org-capture-templates)))
-    (when org-capture-mode
-      (rename-buffer org-velocity-search t))))
-
 (defvar org-velocity-saved-winconf nil)
 (make-variable-buffer-local 'org-velocity-saved-winconf)
 
@@ -340,7 +316,7 @@ use it."
   (set (make-local-variable 'header-line-format)
        (apply #'format control-string args)))
 
-(defun org-velocity-edit-entry/indirect (heading)
+(cl-defun org-velocity-edit-entry/indirect (heading &key buffer-name)
   "Edit entry at HEADING in an indirect buffer."
   (let ((winconf (current-window-configuration))
         (dd default-directory)
@@ -348,6 +324,8 @@ use it."
         (inhibit-point-motion-hooks t)
         (inhibit-field-text-motion t))
     (with-current-buffer buffer
+      (when buffer-name
+        (rename-buffer buffer-name))
       (setq default-directory dd)       ;Inherit default directory.
       (setq org-velocity-saved-winconf winconf)
       (org-velocity-goto-entry heading :narrow t)
@@ -556,23 +534,29 @@ Return matches."
       (with-current-buffer match-buffer
         (erase-buffer)))))
 
-(defun org-velocity-store-link ()
-  "Function for `org-store-link-functions'."
-  (if org-velocity-search
-      (org-store-link-props
-       :search org-velocity-search)))
-
-(add-hook 'org-store-link-functions 'org-velocity-store-link)
+(defun org-velocity-current-selection ()
+  (and (use-region-p)
+       (buffer-substring-no-properties
+        (region-beginning)
+        (region-end))))
 
 (cl-defun org-velocity-create (search &key ask)
   "Create new heading named SEARCH.
 If ASK is non-nil, ask first."
   (when (or (null ask) (y-or-n-p "No match found, create? "))
     (let ((org-velocity-search search)
-          (org-default-notes-file (org-velocity-bucket-file))
-          ;; save a stored link
-          org-store-link-plist)
-      (org-velocity-capture))
+          (selection (org-velocity-current-selection))
+          heading)
+      (with-current-buffer (find-file-noselect (org-velocity-bucket-file))
+        (goto-char (point-max))
+        ;; TODO fresh line.
+        (insert (format "\n* %s\n\n" search))
+        ;; NB There might be a heading in the selection.
+        (let ((pt (point)))
+          (when selection
+            (insert selection))
+          (setf heading (org-velocity-nearest-heading pt))))
+      (org-velocity-edit-entry/indirect heading :buffer-name search))
     search))
 
 (defun org-velocity-engine (search)
