@@ -395,13 +395,14 @@ use it."
                                         :headings nil)))))
     (cl-ecase style
       ((phrase any regexp)
-       (cl-block nil
-         (while (re-search-forward search nil t)
-           (let ((match (org-velocity-nearest-heading (point))))
-             (funcall fun match))
-           ;; Skip to the next heading.
-           (unless (re-search-forward (org-velocity-heading-regexp) nil t)
-             (cl-return)))))
+       (let ((heading-re (org-velocity-heading-regexp)))
+         (cl-block nil
+           (while (re-search-forward search nil t)
+             (let ((match (org-velocity-nearest-heading (point))))
+               (funcall fun match))
+             ;; Skip to the next heading.
+             (unless (re-search-forward heading-re nil t)
+               (cl-return))))))
       ((all)
        (let ((keywords
               (cl-loop for word in (split-string search)
