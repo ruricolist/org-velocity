@@ -1,3 +1,6 @@
 This the development version of org-velocity.
 
 The principal difference here from the version currently in contrib is that we no longer rely on org-capture to create new notes. This makes things considerably simpler and more reliable.
+
+Also: performance on very slow computers (mobile devices) can be
+improved by debouncing the processing of search results.

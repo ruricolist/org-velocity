@@ -4,7 +4,7 @@
 
 ;; Author: Paul M. Rodriguez <paulmrodriguez@gmail.com>
 ;; Created: 2010-05-05
-;; Version: 4.2
+;; Version: 4.3
 
 ;; This file is not part of GNU Emacs.
 
@@ -142,6 +142,19 @@ file."
   :type 'integer
   :safe (lambda (x)
           (and (integerp x)
+               (>= x 0))))
+
+(defcustom org-velocity-debounce-interval 0.0
+  "Interval for debouncing search input.
+
+This is zero by default, which disables debouncing.
+
+Debouncing may improve performance for very large files on slow
+computers and mobile devices."
+  :group 'org-velocity
+  :type 'float
+  :safe (lambda (x)
+          (and (floatp x)
                (>= x 0))))
 
 (defvar crm-separator)                  ;Ensure dynamic binding.
@@ -686,6 +699,38 @@ If ASK is non-nil, ask first."
              (with-current-buffer (org-velocity-match-buffer)
                (use-local-map org-velocity-incremental-keymap)))))))
 
+(defvar org-velocity-reading? nil)
+
+(cl-defun org-velocity-debounce
+    (fn test &optional (wait org-velocity-debounce-interval))
+  "WAIT is how long to wait to run FN.
+TEST is a test to run to decide whether to run FN."
+  (if (zerop wait) fn
+    (let* (timeout timestamp arguments result)
+      (letrec ((later
+                (lambda ()
+                  (let ((last (- (time-to-seconds) timestamp)))
+                    (if (and (< last wait)
+                             (>= last 0))
+                        (setf timeout (run-with-timer (- wait last)
+                                                      nil
+                                                      later))
+                      (setf timeout nil
+                            result
+                            (ignore-errors
+                              ;; Only run the thunk if we are still
+                              ;; searching.
+                              (when (funcall test)
+                                (apply fn arguments))))
+                      (unless timeout
+                        (setf arguments nil)))))))
+        (lambda (&rest args)
+          (setf arguments args
+                timestamp (time-to-seconds))
+          (unless timeout
+            (setf timeout (run-with-timer wait nil later)))
+          result)))))
+
 (defvar dabbrev--last-abbreviation)
 
 (defun org-velocity-dabbrev-completion-list (abbrev)
@@ -739,19 +784,26 @@ MATCH-WINDOW."
   "Read string with PROMPT and display results incrementally.
 Stop searching once there are more matches than can be
 displayed."
-  (let ((res
-         (unwind-protect
-             (let* ((match-window (display-buffer (org-velocity-match-buffer)))
-                    (org-velocity-index (org-velocity-adjust-index match-window)))
-               (catch 'click
-                 (add-hook 'post-command-hook 'org-velocity-update)
-                 (cond ((eq org-velocity-search-method 'regexp)
-                        (read-regexp prompt))
-                       (org-velocity-use-completion
-                        (org-velocity-read-with-completion prompt))
-                       (t (read-string prompt)))))
-           (remove-hook 'post-command-hook 'org-velocity-update))))
-    (if (bufferp res) (pop-to-buffer-same-window res) res)))
+  ;; Using letf for future-proofing.
+  (letf ((org-velocity-reading? t))
+    (let* ((update-fn
+            (org-velocity-debounce
+             #'org-velocity-update
+             (lambda ()
+               org-velocity-reading?)))
+           (res
+            (unwind-protect
+                (let* ((match-window (display-buffer (org-velocity-match-buffer)))
+                       (org-velocity-index (org-velocity-adjust-index match-window)))
+                  (catch 'click
+                    (add-hook 'post-command-hook update-fn)
+                    (cond ((eq org-velocity-search-method 'regexp)
+                           (read-regexp prompt))
+                          (org-velocity-use-completion
+                           (org-velocity-read-with-completion prompt))
+                          (t (read-string prompt)))))
+              (remove-hook 'post-command-hook update-fn))))
+      (if (bufferp res) (pop-to-buffer-same-window res) res))))
 
 (defun org-velocity (arg &optional search)
   "Read a search string SEARCH for Org-Velocity interface.
