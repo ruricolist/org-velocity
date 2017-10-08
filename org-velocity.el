@@ -574,36 +574,41 @@ If ASK is non-nil, ask first."
         (org-velocity-edit-entry/indirect heading :buffer-name search)))
     search))
 
-(defun org-velocity-engine (search)
+(defun org-velocity-engine (search-fn)
   "Display a list of headings where SEARCH occurs."
-  (let ((org-velocity-search search))
-    (unless (or
-             (not (stringp search))
-             (string= "" search))	;exit on empty string
-      (cl-case
-          (if (and org-velocity-force-new (eq last-command-event ?\C-j))
-              :force
-            (let* ((org-velocity-index (org-velocity-adjust-index))
-                   (matches (org-velocity-present search)))
-              (cond ((null matches) :new)
-                    ((null (cdr matches)) :follow)
-                    (t :prompt))))
-        (:prompt (progn
-                   (pop-to-buffer (org-velocity-match-buffer))
-                   (let ((hint (org-velocity-electric-read-hint)))
-                     (when hint (cl-case hint
-                                  (:edit (org-velocity-read nil search))
-                                  (:force (org-velocity-create search))
-                                  (otherwise (org-velocity-activate-button hint)))))))
-        (:new (unless (org-velocity-create search :ask t)
-                (org-velocity-read nil search)))
-        (:force (org-velocity-create search))
-        (:follow (if (y-or-n-p "One match, follow? ")
-                     (progn
-                       (set-buffer (org-velocity-match-buffer))
-                       (goto-char (point-min))
-                       (button-activate (next-button (point))))
-                   (org-velocity-read nil search)))))))
+  (cl-loop
+   (let* ((search (funcall search-fn))
+          (org-velocity-search search))
+     (if (or (not (stringp search))
+             (string= "" search))       ;exit on empty string
+         (cl-return)
+         (cl-case
+             (if (and org-velocity-force-new (eq last-command-event ?\C-j))
+                 :force
+               (let* ((org-velocity-index (org-velocity-adjust-index))
+                      (matches (org-velocity-present search)))
+                 (cond ((null matches) :new)
+                       ((null (cdr matches)) :follow)
+                       (t :prompt))))
+           (:prompt (progn
+                      (pop-to-buffer (org-velocity-match-buffer))
+                      (let ((hint (org-velocity-electric-read-hint)))
+                        (when hint
+                          (cl-case hint
+                            (:edit)
+                            (:force (cl-return (org-velocity-create search)))
+                            (otherwise (cl-return (org-velocity-activate-button hint))))))))
+           (:new
+            (when (org-velocity-create search :ask t)
+              (cl-return)))
+           (:force (cl-return (org-velocity-create search)))
+           (:follow
+            (when (y-or-n-p "One match, follow? ")
+              (cl-return
+               (progn
+                 (set-buffer (org-velocity-match-buffer))
+                 (goto-char (point-min))
+                 (button-activate (next-button (point))))))))))))
 
 (defun org-velocity-activate-button (char)
   "Go to button on line number associated with CHAR in `org-velocity-index'."
@@ -845,9 +850,10 @@ then the current file is used instead, and vice versa."
           (let ((match
                  (catch 'org-velocity-done
                    (org-velocity-engine
-                    (or search
-                        (org-velocity-incremental-read "Velocity search: ")))
-                   nil)))
+                    (if search
+                        (lambda () search)
+                      (lambda ()
+                        (org-velocity-incremental-read "Velocity search: ")))))))
             (when (org-velocity-heading-p match)
               (org-velocity-edit-entry match)))
         (kill-buffer (org-velocity-match-buffer))))))
