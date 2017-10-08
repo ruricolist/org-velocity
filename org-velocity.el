@@ -570,7 +570,8 @@ If ASK is non-nil, ask first."
           (when selection
             (insert selection))
           (setf heading (org-velocity-nearest-heading pt))))
-      (org-velocity-edit-entry/indirect heading :buffer-name search))
+      (unless org-velocity-navigating
+        (org-velocity-edit-entry/indirect heading :buffer-name search)))
     search))
 
 (defun org-velocity-engine (search)
