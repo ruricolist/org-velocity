@@ -4,7 +4,7 @@
 
 ;; Author: Paul M. Rodriguez <paulmrodriguez@gmail.com>
 ;; Created: 2010-05-05
-;; Version: 4.4
+;; Version: 4.4.1
 
 ;; This file is not part of GNU Emacs.
 
@@ -469,7 +469,7 @@ use it."
 
 (defun org-velocity-restrict-search ()
   (interactive)
-  (let ((search (org-velocity-nix-minibuffer)))
+  (let ((search (string-trim (org-velocity-nix-minibuffer))))
     (when (equal search "")
       (error "No search to restrict to"))
     (push search org-velocity-recursive-search)
@@ -745,6 +745,10 @@ TEST is a test to run to decide whether to run FN."
   (dabbrev--reset-global-variables)
   (setq dabbrev--last-abbreviation abbrev)
   (dabbrev--find-all-expansions abbrev case-fold-search))
+
+;;; TODO There should be a keybinding you can use while searching to
+;;; swap between the file you are in and the bucket file. Should it
+;;; preserve restrictions?
 
 (defvar org-velocity-local-completion-map
   (let ((map (make-sparse-keymap)))
