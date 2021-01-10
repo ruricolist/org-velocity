@@ -4,7 +4,7 @@
 
 ;; Author: Paul M. Rodriguez <paulmrodriguez@gmail.com>
 ;; Created: 2010-05-05
-;; Version: 4.4.1
+;; Version: 4.5
 
 ;; This file is not part of GNU Emacs.
 
@@ -63,7 +63,6 @@
 (require 'org)
 (require 'button)
 (require 'electric)
-(require 'dabbrev)
 (require 'cl-lib)
 
 (declare-function evil-make-overriding-map "evil-core")
@@ -114,11 +113,7 @@ instance of the search string."
   :safe 'booleanp)
 
 (defcustom org-velocity-use-completion nil
-  "Use completion?
-
-Notwithstanding the value of this option, calling
-`dabbrev-expand' always completes against the text of the bucket
-file."
+  "Use completion?"
   :group 'org-velocity
   :type '(choice
           (const :tag "Do not use completion" nil)
@@ -737,15 +732,6 @@ TEST is a test to run to decide whether to run FN."
             (setf timeout (run-with-timer wait nil later)))
           result)))))
 
-(defvar dabbrev--last-abbreviation)
-
-(defun org-velocity-dabbrev-completion-list (abbrev)
-  "Return all dabbrev completions for ABBREV."
-  ;; This is based on `dabbrev-completion'.
-  (dabbrev--reset-global-variables)
-  (setq dabbrev--last-abbreviation abbrev)
-  (dabbrev--find-all-expansions abbrev case-fold-search))
-
 ;;; TODO There should be a keybinding you can use while searching to
 ;;; swap between the file you are in and the bucket file. Should it
 ;;; preserve restrictions?
@@ -767,9 +753,7 @@ TEST is a test to run to decide whether to run FN."
          org-velocity-local-completion-map)
         (completion-no-auto-exit t)
         (crm-separator " "))
-    (completing-read prompt
-                     (completion-table-dynamic
-                      'org-velocity-dabbrev-completion-list))))
+    (read-string prompt)))
 
 (cl-defun org-velocity-adjust-index
     (&optional (match-window (org-velocity-match-window)))
@@ -847,9 +831,7 @@ then the current file is used instead, and vice versa."
            (org-velocity-heading-level
             (if org-velocity-navigating
                 0
-              org-velocity-heading-level))
-           (dabbrev-search-these-buffers-only
-            (list org-velocity-bucket-buffer)))
+              org-velocity-heading-level)))
       (unwind-protect
           (let ((match
                  (catch 'org-velocity-done
