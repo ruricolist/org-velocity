@@ -781,7 +781,7 @@ MATCH-WINDOW."
 Stop searching once there are more matches than can be
 displayed."
   ;; Using letf for future-proofing.
-  (letf ((org-velocity-reading? t))
+  (cl-letf ((org-velocity-reading? t))
     (let* ((update-fn
             (org-velocity-debounce
              #'org-velocity-update
